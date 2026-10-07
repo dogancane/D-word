@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>D-word: Danish vocabulary for Modul 4 and PD3</title>
+<title>D-word</title>
 <!-- Keep this site out of Google and other search engines. Remove this line to allow indexing. -->
 <meta name="robots" content="noindex, nofollow, noarchive">
-<meta name="description" content="D-word: free Danish vocabulary trainer with 4,000 words, example sentences, flashcards, true/false tests and timed quizzes. Built for Modul 4 and PD3 reading.">
+<meta name="description" content="D-word: Danish vocabulary trainer with flashcards, tests and quizzes.">
 <meta name="theme-color" content="#1c1f23">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="favicon.svg">
-<meta property="og:title" content="D-word: Danish vocabulary trainer">
-<meta property="og:description" content="4,000 Danish words with example sentences, flashcards, tests and quizzes.">
+<meta property="og:title" content="D-word">
+<meta property="og:description" content="Danish vocabulary trainer with flashcards, tests and quizzes.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&display=swap" rel="stylesheet">
@@ -5824,7 +5824,7 @@ function openStats() {
     ]);
     $("builtinToggle").checked = useBuiltIn;
     $("adminNote").textContent = (speechSupported()
-      ? (danishVoice ? "Voice: " + danishVoice.name + ". " : "No Danish voice on this device. ")
+      ? (voices.da ? "Voice: " + voices.da.name + ". " : "No Danish voice on this device. ")
       : "No speech support in this browser. ") +
       "Learned = 3 correct days, mastered = 5. Hard halves the level, Again or a wrong answer resets it.";
   }
@@ -5906,43 +5906,142 @@ function resetProgress() {
 
 /* =========================================================
    SECTION 14: PRONUNCIATION (browser SpeechSynthesis)
-   Picks a Danish voice automatically when the device has one.
-   Always speaks the Danish word, whichever direction is chosen.
+   - Danish text is always read by a Danish voice, English text by an
+     English voice. A Danish word is never read by an English voice,
+     because that teaches the wrong pronunciation.
+   - The best Danish voice on the device is chosen automatically:
+     natural/neural voices first (e.g. Microsoft Christel or Jeppe in Edge),
+     then premium/enhanced voices (e.g. Apple Sara), then the rest.
+   - Recorded MP3 files are used for Danish words when available (below).
+   - Abbreviations (f.eks., dvs., osv. ...) are read as full words.
    ========================================================= */
-let danishVoice = null;
-let warnedNoVoice = false;
+const voices = { da: null, en: null, daList: [] };
+let voicesLoaded = false;
 
 function speechSupported() { return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window; }
 
+function langOf(v) { return String(v.lang || "").toLowerCase().replace("_", "-"); }
+
+function voiceScore(v) {
+  const n = v.name.toLowerCase();
+  let s = 0;
+  if (/natural|neural|online/.test(n)) s += 40;   // Edge online voices: by far the best quality
+  if (/premium|enhanced|forbedret/.test(n)) s += 30;
+  if (/google/.test(n)) s += 15;
+  if (/christel|jeppe|sara|magnus|naja|mads|helle/.test(n)) s += 5;
+  if (/compact|eloquence|espeak/.test(n)) s -= 20; // robotic voices last
+  return s;
+}
+
 function loadVoices() {
   if (!speechSupported()) return;
-  const voices = speechSynthesis.getVoices();
-  danishVoice = voices.find(v => /^da([-_]|$)/i.test(v.lang) && v.localService)
-             || voices.find(v => /^da([-_]|$)/i.test(v.lang)) || null;
+  const all = speechSynthesis.getVoices();
+  if (!all.length) return;
+  voicesLoaded = true;
+  voices.daList = all.filter(v => /^da(-|$)/.test(langOf(v))).sort((a, b) => voiceScore(b) - voiceScore(a));
+  voices.da = voices.daList[0] || null;
+  const en = all.filter(v => /^en(-|$)/.test(langOf(v)))
+    .sort((a, b) => (voiceScore(b) + (langOf(b) === "en-gb" ? 3 : 0)) - (voiceScore(a) + (langOf(a) === "en-gb" ? 3 : 0)));
+  voices.en = en[0] || null;
 }
 
-/* Remove notes like "(verbum/verb - præsens)" so only the word is spoken. */
-function cleanForSpeech(text) {
-  return text.replace(/\(.*?\)|\[.*?\]/g, " ").split("→")[0].replace(/\s+/g, " ").trim();
+/* Read abbreviations and symbols the way a Dane says them. */
+const DA_ABBR = [
+  [/\bf\.eks\./gi, "for eksempel"], [/\bfx\b/gi, "for eksempel"], [/\bdvs\./gi, "det vil sige"],
+  [/\bosv\./gi, "og så videre"], [/\bbl\.a\./gi, "blandt andet"], [/\bmht\./gi, "med hensyn til"],
+  [/\bift\./gi, "i forhold til"], [/\bevt\./gi, "eventuelt"], [/\bca\./gi, "cirka"],
+  [/\bkl\./gi, "klokken"], [/\bnr\./gi, "nummer"], [/\bpct\./gi, "procent"], [/\bkr\./gi, "kroner"],
+  [/\bm\.m\./gi, "med mere"], [/\bo\.l\./gi, "og lignende"], [/\bjf\./gi, "jævnfør"],
+  [/\bSoMe\b/g, "sociale medier"], [/\bCO2\b/gi, "C O to"], [/%/g, " procent"]
+];
+function cleanForSpeech(text, lang) {
+  let s = String(text).replace(/\(.*?\)|\[.*?\]/g, " ").split("→")[0];
+  if (lang === "da") for (const [re, rep] of DA_ABBR) s = s.replace(re, rep);
+  return s.replace(/\s*\/\s*/g, ", ").replace(/\s+/g, " ").trim();
 }
 
-function speak(text) {
+let warnedNoVoice = false;
+function speak(text, lang) {
+  lang = lang || "da";
   if (!speechSupported()) { toast("Pronunciation is not supported in this browser."); return; }
+  if (!voicesLoaded) loadVoices();
+  const voice = lang === "da" ? voices.da : voices.en;
+
+  // No Danish voice on this device: do not let an English voice mispronounce Danish.
+  if (lang === "da" && !voice && voicesLoaded) {
+    toast("Pronunciation is not available for this word on this device.");
+    return;
+  }
+
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(cleanForSpeech(text));
-  u.lang = CONFIG.speechLang;
-  u.rate = CONFIG.speechRate;
-  if (danishVoice) u.voice = danishVoice;
+  const u = new SpeechSynthesisUtterance(cleanForSpeech(text, lang));
+  u.lang = voice ? voice.lang : (lang === "da" ? "da-DK" : "en-GB");
+  if (voice) u.voice = voice;
+  u.rate = lang === "da" ? CONFIG.speechRate : 1;
   speechSynthesis.speak(u);
-  if (!danishVoice && !warnedNoVoice) {
-    warnedNoVoice = true;
-    toast("No Danish voice installed on this device, so it may sound wrong.");
+}
+
+/* ---- Recorded word audio ----
+   Every Danish word has an MP3 file in the "audio" folder, made once with a
+   natural Danish voice (see generate_audio.py). Playing a small MP3 works on
+   every device, also old phones, with no Danish voice installed.
+   If a file is missing (for example a word added later), the browser's own
+   Danish voice is used instead.
+   File name = the spoken text in lower case, with spaces as "-" and every
+   other character that is not a-z or 0-9 written as "_" + its code,
+   e.g. "fører" -> "f_f8rer.mp3". generate_audio.py uses the same rule. */
+const AUDIO_FOLDER = "audio/";
+const missingAudio = new Set();
+let player = null;
+
+function audioName(text) {
+  const s = cleanForSpeech(text, "da").toLowerCase();
+  let out = "";
+  for (const ch of s) {
+    if (/[a-z0-9]/.test(ch)) out += ch;
+    else if (ch === " ") out += "-";
+    else out += "_" + ch.codePointAt(0).toString(16);
+  }
+  return out;
+}
+
+function speakWord(text) {
+  const name = audioName(text);
+  if (!name || missingAudio.has(name) || typeof Audio === "undefined") { speak(text, "da"); return; }
+  try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+  if (!player) player = new Audio();
+  player.pause();
+  let fellBack = false;
+  const fallback = () => {
+    if (fellBack) return;
+    fellBack = true;
+    missingAudio.add(name);
+    speak(text, "da");
+  };
+  player.onerror = fallback;
+  player.src = AUDIO_FOLDER + name + ".mp3";
+  const p = player.play();
+  if (p && p.catch) p.catch(err => { if (!err || err.name !== "NotAllowedError") fallback(); });
+}
+
+/* Which text to read for the card or question on screen.
+   Danish → English: always the Danish word.
+   English → Danish: the English meaning until the answer is shown, then the Danish word. */
+function speakCurrent() {
+  if (ui.mode === "study" && ui.current >= 0) {
+    const c = cards[ui.current];
+    if (ui.dir === "en" && !ui.flipped) speak(c.meaning, "en"); else speakWord(c.danish);
+  } else if ((ui.mode === "test" || ui.mode === "quiz") && session.q) {
+    const c = cards[session.q.i];
+    if (ui.dir === "en" && !session.answered) speak(c.meaning, "en"); else speakWord(c.danish);
   }
 }
 
 if (speechSupported()) {
   loadVoices();
-  speechSynthesis.onvoiceschanged = loadVoices;
+  speechSynthesis.addEventListener ? speechSynthesis.addEventListener("voiceschanged", loadVoices) : (speechSynthesis.onvoiceschanged = loadVoices);
+  // Some browsers fill the voice list late: try again a few times.
+  [250, 1000, 2500].forEach(ms => setTimeout(loadVoices, ms));
 }
 
 
@@ -6026,7 +6125,7 @@ function on(id, fn) {
 
 $("card").addEventListener("click", flip);
 on("favBtn", e => { e.stopPropagation(); toggleFavorite(ui.current); renderCard(); });
-on("speakBtn", e => { e.stopPropagation(); if (ui.current >= 0) speak(cards[ui.current].danish); });
+on("speakBtn", e => { e.stopPropagation(); speakCurrent(); });
 on("againBtn", () => rate("again"));
 on("hardBtn", () => rate("hard"));
 on("easyBtn", () => rate("easy"));
@@ -6045,7 +6144,7 @@ on("yesBtn", () => answer(true));
 on("noBtn", () => answer(false));
 on("qNextBtn", goNextQuestion);
 on("endBtn", finishSession);
-on("qSpeakBtn", () => { if (session.q) speak(cards[session.q.i].danish); });
+on("qSpeakBtn", speakCurrent);
 on("qFavBtn", () => { if (session.q) setFavButton($("qFavBtn"), toggleFavorite(session.q.i)); });
 
 on("studyMissedBtn", () => { setMode("study"); setFilter("review"); });
@@ -6110,7 +6209,7 @@ document.addEventListener("keydown", e => {
 
   if (k === "/") { e.preventDefault(); $("searchInput").focus(); return; }
   if (k === "d") { setDirection(ui.dir === "da" ? "en" : "da"); return; }
-  if (k === "s") { const i = currentWordIndex(); if (i >= 0) speak(cards[i].danish); return; }
+  if (k === "s") { speakCurrent(); return; }
 
   if (ui.mode === "study") {
     if (isSpace) { e.preventDefault(); spaceHandled = true; flip(); }
