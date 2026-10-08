@@ -12,9 +12,6 @@
 <link rel="apple-touch-icon" href="favicon.svg">
 <meta property="og:title" content="D-word">
 <meta property="og:description" content="Danish vocabulary trainer with flashcards, tests and quizzes.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&display=swap" rel="stylesheet">
 <script>
   /* Apply the saved theme before the page is drawn, so dark mode does not flash white. */
   try {
@@ -43,7 +40,7 @@
   --good-bg: #eaf5ec;
   --bad-bg: #fbecea;
   --star: #d39e00;
-  --word-font: "Literata", Georgia, "Times New Roman", serif;
+  --word-font: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, "Times New Roman", serif;
   --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color-scheme: light;
 }
@@ -177,7 +174,7 @@ button, select, input { font: inherit; color: inherit; }
 .hint { margin-top: 22px; color: var(--muted); font-size: .95rem; }
 
 /* ---------- Study rating buttons ---------- */
-.rate { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+.rate { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
 .rate button:disabled { opacity: .4; cursor: default; }
 .rate button:disabled:hover { background: var(--surface); }
 .rate b { white-space: nowrap; }
@@ -243,6 +240,25 @@ kbd { font-family: inherit; font-size: .8em; border: 1px solid var(--line); bord
 .feedback .btn { margin-top: 14px; width: 100%; min-height: 52px; font-size: 1.05rem; }
 .end-link { margin-top: 12px; }
 
+/* Phones: after answering, the result is shown right under the card and
+   "Next question" stays fixed at the bottom of the screen, so no scrolling
+   is needed. Tapping the card also goes to the next question. */
+#testView.answered #qCard { cursor: pointer; }
+@media (max-width: 700px) {
+  #testView .card { min-height: 210px; padding: 50px 14px 18px; }
+  #testView .prompt { font-size: clamp(1.8rem, 8vw, 2.6rem); }
+  #testView.answered .card { min-height: 0; padding-bottom: 14px; }
+  #testView .candidate-label { margin-top: 12px; }
+  #testView .feedback { padding: 12px 14px; }
+  #testView .feedback .example { font-size: 1rem; }
+  #testView.answered { padding-bottom: 84px; }
+  #testView.answered #qNextBtn {
+    position: fixed; left: 16px; right: 16px; z-index: 30; width: auto; margin: 0;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+  }
+}
+
 /* ---------- Results ---------- */
 .result { margin-top: 14px; }
 .result h2 { font-family: var(--word-font); font-size: 1.9rem; margin: 0 0 12px; }
@@ -287,7 +303,10 @@ dialog h3 { margin: 22px 0 8px; font-size: 1rem; }
   max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 10px;
   background: var(--ink); color: var(--bg); font-size: .95rem; z-index: 50;
 }
-footer { margin-top: 36px; color: var(--muted); font-size: .85rem; }
+.how-to { margin-top: 28px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); font-size: .88rem; line-height: 1.45; }
+.how-to p { margin: 2px 0; }
+.how-to b { color: var(--ink); font-weight: 600; }
+footer { margin-top: 20px; color: var(--muted); font-size: .85rem; }
 .foot-link { color: var(--muted); margin-left: 8px; }
 </style>
 </head>
@@ -4602,9 +4621,8 @@ const builtInVocabulary = [
       <div id="rateRow" class="rate">
         <button id="backBtn" class="nav" type="button" aria-label="Previous word"><b>← Back</b></button>
         <button id="againBtn" class="again" type="button"><b>Again</b></button>
-        <button id="hardBtn" class="hard" type="button"><b>Hard</b></button>
         <button id="easyBtn" class="easy" type="button"><b>Easy</b></button>
-        <button id="nextBtn" class="nav" type="button" aria-label="Next word"><b>Next →</b></button>
+        <button id="hardBtn" class="hard" type="button"><b>Hard</b></button>
       </div>
 
       <div id="emptyView" class="empty" hidden>
@@ -4621,7 +4639,7 @@ const builtInVocabulary = [
         <span id="qScore"></span>
         <span id="qTimer" class="timer" hidden></span>
       </div>
-      <div class="card">
+      <div id="qCard" class="card">
         <div class="card-tools">
           <span id="qLabel" class="chip">Test</span>
           <button id="qFavBtn" class="icon-btn" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button>
@@ -4667,6 +4685,13 @@ const builtInVocabulary = [
       </div>
     </section>
   </main>
+
+  <section id="howTo" class="how-to" aria-label="How the buttons work">
+    <p><b>Tap the card</b> to see the meaning, tap again for the next word.</p>
+    <p><b>Again:</b> you did not know it. It comes back after 10 words.</p>
+    <p><b>Easy:</b> you knew it. It rests for at least 200 words.</p>
+    <p><b>Hard:</b> you were unsure. It comes back after 15 words.</p>
+  </section>
 
   <footer>
     Your progress is saved in this browser on this device.
@@ -4725,8 +4750,9 @@ const CONFIG = {
   learnedLevel: 3,                         // 3 correct days = learned.
   masteredLevel: 5,                        // 5 correct days = mastered.
   clearHardAfter: 2,                       // Correct answers in a row that remove the Hard mark.
-  againGap: 3,                             // Wrong/Again words return after this many cards.
-  hardGap: 10,                             // Hard words return after this many cards (and tomorrow).
+  againGap: 10,                            // Again / wrong answer: the word returns after this many cards.
+  hardGap: 15,                             // Hard: the word returns after this many cards.
+  easyGap: 200,                            // Easy: the word rests for at least this many cards.
   newEvery: 3,                             // While reviews are due, every Nth card is a new word.
   recentSize: 25,                          // Never repeat any of the last N cards (unless the list is tiny).
   quizSize: 20,                            // Words per quiz.
@@ -5001,9 +5027,12 @@ function statusOf(p) {
    result = "correct" (Easy, or a right test answer)
             "hard"    (Hard)
             "wrong"   (Again, or a wrong test answer)
-   - Correct: +1 level, at most once per day, so "learned" needs 3 separate days.
-   - Hard: level is halved, word is marked Hard, returns later today and tomorrow.
-   - Wrong: level 0, marked Hard, returns after a few cards.
+   - Correct (Easy): +1 level, at most once per day, so "learned" needs 3
+     separate days. The word then rests for at least 200 cards.
+   - Hard: level is halved, word is marked Hard and returns after 15 cards.
+   - Wrong (Again): level 0, marked Hard, returns after 10 cards.
+   - No rating (just tapping on): nothing changes and the word does not
+     come back until the rest of the list has been shown.
    - The Hard mark is removed after 2 correct answers in a row. */
 function applyResult(id, result) {
   const p = getP(id);
@@ -5016,13 +5045,14 @@ function applyResult(id, result) {
     if (p.u !== t) { p.l = Math.min(p.l + 1, MAX_LEVEL); p.u = t; }
     if (p.h && p.r >= CONFIG.clearHardAfter) p.h = 0;
     p.d = t + CONFIG.intervals[p.l];
+    p.k = sched.counter + CONFIG.easyGap;   // rest for the next 200 cards
     removeSoon(id);
   } else if (result === "hard") {
     p.r = 0;
     p.l = Math.floor(p.l / 2);
     p.u = 0;                        // the next correct answer may raise the level again
     p.h = 1;
-    p.d = t + 1;
+    p.d = t;
     addSoon(id, CONFIG.hardGap);
   } else {
     p.w++;
@@ -5106,35 +5136,25 @@ function nextFromBag(test) {
   return -1;
 }
 
+/* "All words" in Study and Test:
+   - Words rated Again or Hard come back through the short queue
+     (Again after 10 cards, Hard after 15). That is handled in pickNext().
+   - Every other card is the next word from a fair shuffled order of the
+     whole list. A word you only looked at (no rating) is not shown again
+     until every other word has had its turn.
+   - Words rated Easy are skipped for the next 200 cards.
+   - The last 25 cards are never repeated. */
 function pickAll(recent) {
-  const t = today();
-  const notRecent = i => !recent.has(cards[i].id);
-
-  // Best due word: Hard before others, then the most overdue. Random start avoids alphabetical bias.
-  let due = -1, dueHard = false, dueDay = Infinity;
-  const start = Math.floor(Math.random() * cards.length);
-  for (let k = 0; k < cards.length; k++) {
-    const i = (start + k) % cards.length;
-    const p = progress[cards[i].id];
-    if (!p || !p.n || p.d > t || !notRecent(i)) continue;
-    const hard = !!p.h;
-    if (due < 0 || (hard && !dueHard) || (hard === dueHard && p.d < dueDay)) {
-      due = i; dueHard = hard; dueDay = p.d;
-    }
-  }
-
-  const wantNew = due < 0 || (!dueHard && sched.counter % CONFIG.newEvery === 0) || (dueHard && sched.counter % (CONFIG.newEvery * 2) === 0);
-  if (wantNew) {
-    const i = nextFromBag(i => isNewP(P(i)) && notRecent(i));
-    if (i >= 0) return i;
-  }
-  if (due >= 0) return due;
-
-  let i = nextFromBag(i => isHardP(P(i)) && notRecent(i));
+  const queued = new Set(sched.soon.map(s => s.id));
+  const ok = i => {
+    const id = cards[i].id;
+    if (recent.has(id) || queued.has(id)) return false;
+    const p = progress[id];
+    return !(p && p.k && p.k > sched.counter);     // Easy word still resting
+  };
+  let i = nextFromBag(ok);
   if (i >= 0) return i;
-  i = nextFromBag(i => !isLearnedP(P(i)) && notRecent(i));
-  if (i >= 0) return i;
-  i = nextFromBag(notRecent);
+  i = nextFromBag(j => !recent.has(cards[j].id));
   if (i >= 0) return i;
   return cards.length ? Math.floor(Math.random() * cards.length) : -1;
 }
@@ -5267,7 +5287,10 @@ function showCard(i, goingBack) {
   ui.flipped = false;
   if (i >= 0) {
     sched.current = cards[i].id;
-    if (!goingBack) { pushRecent(cards[i].id); markSeen(cards[i].id); }
+    if (!goingBack) {
+      pushRecent(cards[i].id);
+      markSeen(cards[i].id);
+    }
   }
   renderCard();
   scheduleSave();
@@ -5300,8 +5323,9 @@ function renderCard() {
   setExample($("example"), c, $("exampleEn"));
 
   $("back").hidden = !ui.flipped;
-  $("hint").hidden = ui.flipped;
-  $("hint").textContent = ui.dir === "da" ? "Tap to show the English" : "Tap to show the Danish word";
+  $("hint").hidden = false;
+  $("hint").textContent = ui.flipped ? "Tap for the next word"
+    : (ui.dir === "da" ? "Tap to show the English" : "Tap to show the Danish word");
 
   const st = statusOf(p);
   $("cardStatus").textContent = st.label;
@@ -5319,11 +5343,29 @@ function renderCard() {
   $("backBtn").disabled = ui.history.length === 0;
 }
 
+/* Tap on the card (or Space):
+   1st tap shows the answer, 2nd tap goes to the next card.
+   Seeing the answer counts the word for today's goal and the streak. */
 function flip() {
   if (ui.current < 0) return;
-  ui.flipped = !ui.flipped;
-  $("back").hidden = !ui.flipped;
-  $("hint").hidden = ui.flipped;
+  if (ui.flipped) { showNext(); return; }
+  ui.flipped = true;
+  $("back").hidden = false;
+  $("hint").textContent = "Tap for the next word";
+  countToday(cards[ui.current].id);
+}
+
+/* Count a word for "Today" and the streak without rating it. */
+function countToday(id) {
+  ensureToday();
+  const t = today();
+  if (!dailySet.has(id)) { dailySet.add(id); daily.ids.push(id); }
+  if (streak.last !== t) {
+    streak.count = streak.last === t - 1 ? streak.count + 1 : 1;
+    streak.last = t;
+  }
+  scheduleSave();
+  renderProgress();
 }
 
 function rate(kind) {
@@ -5464,6 +5506,7 @@ function nextQuestion() {
   session.answered = false;
   renderQuestion();
   $("yesBtn").focus({ preventScroll: true });
+  scrollTestIntoView();
 }
 
 function renderQuestion() {
@@ -5488,6 +5531,7 @@ function renderQuestion() {
   setFavButton($("qFavBtn"), progress[c.id]);
 
   $("tfRow").hidden = session.answered;
+  $("testView").classList.toggle("answered", session.answered);
   $("feedback").hidden = !session.answered;
   renderStatus();
 }
@@ -5549,6 +5593,15 @@ function answer(userSaysCorrect) {
   renderProgress();
   $("qNextBtn").textContent = (session.total && session.pos + 1 >= session.total) ? "See result" : "Next question";
   $("qNextBtn").focus({ preventScroll: true });
+  scrollTestIntoView();
+}
+
+/* On phones, line the question up at the top of the screen so the card,
+   the result and the fixed "Next question" button all fit. */
+function scrollTestIntoView() {
+  if (window.innerWidth > 700) return;
+  const top = $("testView").getBoundingClientRect().top + window.pageYOffset - 8;
+  if (Math.abs(window.pageYOffset - top) > 4) window.scrollTo(0, Math.max(0, top));
 }
 
 function goNextQuestion() {
@@ -5637,6 +5690,8 @@ function finishSession() {
    SECTION 11: MODES AND PROGRESS LINE
    ========================================================= */
 function setMode(mode) {
+  const how = document.getElementById("howTo");
+  if (how) how.hidden = mode !== "study";
   if (mode !== "quiz" && mode !== "result") stopTimer();
   ui.mode = mode;
   $("studyView").hidden = mode !== "study";
@@ -6129,7 +6184,6 @@ on("speakBtn", e => { e.stopPropagation(); speakCurrent(); });
 on("againBtn", () => rate("again"));
 on("hardBtn", () => rate("hard"));
 on("easyBtn", () => rate("easy"));
-on("nextBtn", () => showNext());
 on("backBtn", goBack);
 on("showAllBtn", () => setFilter("all"));
 
@@ -6143,6 +6197,10 @@ $("filterSelect").addEventListener("change", e => setFilter(e.target.value));
 on("yesBtn", () => answer(true));
 on("noBtn", () => answer(false));
 on("qNextBtn", goNextQuestion);
+$("qCard").addEventListener("click", e => {
+  if (e.target.closest("button")) return;
+  if (session.answered) goNextQuestion();
+});
 on("endBtn", finishSession);
 on("qSpeakBtn", speakCurrent);
 on("qFavBtn", () => { if (session.q) setFavButton($("qFavBtn"), toggleFavorite(session.q.i)); });
